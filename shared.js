@@ -207,7 +207,9 @@
   }
 
   function roundUpTo10(n) {
-    return Math.ceil(n / 10) * 10;
+    // Redondea hacia arriba al múltiplo de 500 más cercano.
+    // Resultado: todos los precios terminan en 000 o en 500.
+    return Math.ceil(n / 500) * 500;
   }
 
   /* ============================================================
@@ -557,26 +559,65 @@
       return data;
     },
 
-    /** Lee productos públicos (GET sin token). Para tienda. */
+    /** Lee productos públicos (GET sin token). Para tienda.
+     *  Usa modo 'no-cors' alternativo si el fetch directo falla por CORS:
+     *  envía como POST con text/plain (que es un simple request, sin preflight).
+     */
     async fetchPublicProducts(url) {
       if (!url) throw new Error('URL no configurada');
-      const sep = url.includes('?') ? '&' : '?';
-      const res = await fetch(url + sep + 'mode=tienda', { method: 'GET' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Error desconocido');
-      return data.products || [];
+      // Intento 1: GET directo (funciona en mayoría de casos)
+      try {
+        const sep = url.includes('?') ? '&' : '?';
+        const res = await fetch(url + sep + 'mode=tienda', {
+          method: 'GET',
+          redirect: 'follow'
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Error desconocido');
+        return data.products || [];
+      } catch (e) {
+        // Intento 2: POST con text/plain (simple request, sin preflight CORS)
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'GET_PUBLIC' }),
+          redirect: 'follow'
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Error desconocido');
+        return data.products || [];
+      }
     },
 
     /** Lee config pública (GET sin token). Para tienda. */
     async fetchPublicConfig(url) {
       if (!url) throw new Error('URL no configurada');
-      const sep = url.includes('?') ? '&' : '?';
-      const res = await fetch(url + sep + 'mode=config', { method: 'GET' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Error desconocido');
-      return data.config || {};
+      // Intento 1: GET directo
+      try {
+        const sep = url.includes('?') ? '&' : '?';
+        const res = await fetch(url + sep + 'mode=config', {
+          method: 'GET',
+          redirect: 'follow'
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Error desconocido');
+        return data.config || {};
+      } catch (e) {
+        // Intento 2: POST con text/plain
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'GET_CONFIG_PUBLIC' }),
+          redirect: 'follow'
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Error desconocido');
+        return data.config || {};
+      }
     },
 
     // Wrappers admin
