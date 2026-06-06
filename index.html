@@ -629,6 +629,22 @@ textarea { min-height: 80px; resize: vertical; }
         <button class="btn" id="btnRefresh">🔄 Refrescar datos</button>
       </div>
     </div>
+
+    <div class="card" style="border-left: 4px solid #00A859;">
+      <div class="card-title">🔄 Forzar actualización en la tienda</div>
+      <div class="card-sub">
+        Si editaste algo directamente en el Google Sheet (precios, banner, etc.) y querés que los
+        clientes vean los cambios <strong>inmediatamente</strong> sin esperar, tocá este botón.
+        <br>
+        <span class="muted">Los cambios hechos desde este admin se aplican solos, no necesitás tocarlo.</span>
+      </div>
+      <div class="row mt-2">
+        <button class="btn btn-success" id="btnBumpVersion" style="font-size: 15px; padding: 12px 20px;">
+          🔄 Forzar actualización ahora
+        </button>
+        <div id="bumpVersionStatus" class="muted" style="align-self: center;"></div>
+      </div>
+    </div>
   </section>
 
   <!-- ============================================================ -->
@@ -1061,6 +1077,41 @@ textarea { min-height: 80px; resize: vertical; }
       if (showToast) P.utils.toast('Sincronizado: ' + state.products.length + ' productos', 'success');
     } catch (e) {
       P.utils.toast('Error al sincronizar: ' + e.message, 'error');
+    }
+  }
+
+  /**
+   * Fuerza la actualización del catálogo en la tienda incrementando la versión.
+   * Útil cuando se editan datos directamente en el Google Sheet.
+   */
+  async function forceCatalogRefresh() {
+    const { url, token } = getCreds();
+    if (!url || !token) {
+      P.utils.toast('Primero configurá la conexión', 'error');
+      return;
+    }
+    const btn = $('#btnBumpVersion');
+    const status = $('#bumpVersionStatus');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Actualizando...';
+    status.textContent = '';
+    try {
+      const res = await P.api.bumpVersion(url, token);
+      if (res.ok) {
+        P.utils.toast('✓ Catálogo refrescado. Los clientes verán los cambios al recargar la tienda.', 'success');
+        status.textContent = 'Última actualización forzada: versión ' + res.version + ' · ' + new Date().toLocaleTimeString('es-AR');
+        // Refrescar también los datos locales del admin
+        await syncFromServer(false);
+        await loadConfigFromServer();
+      } else {
+        P.utils.toast('Error: ' + (res.error || 'desconocido'), 'error');
+      }
+    } catch (e) {
+      P.utils.toast('Error: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
     }
   }
 
@@ -1630,6 +1681,7 @@ textarea { min-height: 80px; resize: vertical; }
     $('#testConnBtn').onclick = testConnection;
     $('#saveConnBtn').onclick = saveAndSync;
     $('#btnRefresh').onclick = () => syncFromServer(true);
+    $('#btnBumpVersion').onclick = forceCatalogRefresh;
 
     $('#previewSearch').oninput = P.utils.debounce(() => {
       if (state.parsed) renderPreviewTable(state.parsed.products, $('#previewSearch').value);
