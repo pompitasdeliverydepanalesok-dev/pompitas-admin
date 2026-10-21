@@ -1394,6 +1394,53 @@ textarea { min-height: 80px; resize: vertical; }
   // ============================================================
   // PUBLICAR
   // ============================================================
+  // ------------------------------------------------------------
+  // CONSERVAR IMÁGENES AL REIMPORTAR
+  // Copia la imagen de cada producto actual a su equivalente del PDF nuevo,
+  // aunque el nombre cambie un poco o el talle antes no estuviera detectado.
+  // ------------------------------------------------------------
+  function normImgKey(str) {
+    return String(str || '').toUpperCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/\bUNID(ADES)?\b/g, ' ')
+      .replace(/[^A-Z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  function carryOverImages(newList, oldList) {
+    const exact = {}, norm = {}, normNoSize = {};
+    const withImg = oldList.filter(p => p.imageUrl);
+    for (const o of withImg) {
+      exact[o.name + '|' + (o.size || '')] = o.imageUrl;
+      norm[normImgKey(o.name) + '|' + (o.size || '')] = o.imageUrl;
+      const k = normImgKey(o.name);
+      (normNoSize[k] = normNoSize[k] || new Set()).add(o.imageUrl);
+    }
+    const usedOldKeys = new Set();
+    let kept = 0;
+    for (const n of newList) {
+      if (n.imageUrl) continue;
+      const kExact = n.name + '|' + (n.size || '');
+      const kNorm = normImgKey(n.name) + '|' + (n.size || '');
+      let img = exact[kExact] || norm[kNorm];
+      if (!img) {
+        // Mismo producto pero el talle cambió (ej: antes vacío, ahora detectado)
+        const set = normNoSize[normImgKey(n.name)];
+        if (set && set.size === 1) img = Array.from(set)[0];
+      }
+      if (img) {
+        n.imageUrl = img;
+        kept++;
+        usedOldKeys.add(normImgKey(n.name));
+      }
+    }
+    // Productos con imagen que no tienen equivalente en el PDF nuevo
+    const newNorm = new Set(newList.map(n => normImgKey(n.name)));
+    const orphans = withImg.filter(o => !newNorm.has(normImgKey(o.name)));
+    return { kept, totalWithImage: withImg.length, orphans };
+  }
+
   async function publish() {
     if (!state.parsed) return;
     const { url, token } = getCreds();
@@ -1411,8 +1458,14 @@ textarea { min-height: 80px; resize: vertical; }
         <div class="stat"><div class="stat-label">Bajas</div><div class="stat-value">${s.priceDown}</div></div>
         <div class="stat"><div class="stat-label">Sin precio</div><div class="stat-value">${s.noStock}</div></div>
       </div>
-      <p class="mt-3 muted small">Las imágenes y precios manuales que ya cargaste se conservan automáticamente para los productos que coincidan por nombre+talle.</p>
+      <div class="mt-3 small" id="imgCarryInfo"></div>
     `;
+    const carry = carryOverImages(state.parsed.products, state.products || []);
+    $('#imgCarryInfo').innerHTML = `
+      <p><strong>🖼️ Imágenes:</strong> se conservan <strong>${carry.kept}</strong> de las ${carry.totalWithImage} que tenés cargadas.</p>
+      ` + (carry.orphans.length
+        ? `<p class="muted">${carry.orphans.length} producto(s) con imagen ya no figuran en el PDF (ej: ${escapeHtml(carry.orphans.slice(0,3).map(o => o.name).join(' · '))}). Si querés conservarlos, cancelá y avisame.</p>`
+        : `<p class="muted">Ningún producto con imagen desaparece del catálogo.</p>`);
     modal.classList.add('active');
   }
 
