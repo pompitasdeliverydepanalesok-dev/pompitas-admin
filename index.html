@@ -1403,19 +1403,28 @@ textarea { min-height: 80px; resize: vertical; }
     return String(str || '').toUpperCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/\([^)]*\)/g, ' ')
+      .replace(/\b(JUNIOR|JR|J)X\d+\b/g, ' ')
       .replace(/\bUNID(ADES)?\b/g, ' ')
       .replace(/[^A-Z0-9]+/g, ' ')
       .replace(/\s+/g, ' ').trim();
   }
 
+  function familyKey(str) {
+    return normImgKey(str)
+      .replace(/\b(XXXG|XXXL|XXG|XXL|XG|XL|XP|XS|RN|JUNIOR|JR|SG|MG|PP|GG|J|P|M|G|L|S)X\d+\b/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+
   function carryOverImages(newList, oldList) {
-    const exact = {}, norm = {}, normNoSize = {};
+    const exact = {}, norm = {}, normNoSize = {}, family = {};
     const withImg = oldList.filter(p => p.imageUrl);
     for (const o of withImg) {
       exact[o.name + '|' + (o.size || '')] = o.imageUrl;
       norm[normImgKey(o.name) + '|' + (o.size || '')] = o.imageUrl;
       const k = normImgKey(o.name);
       (normNoSize[k] = normNoSize[k] || new Set()).add(o.imageUrl);
+      const fk = familyKey(o.name);
+      (family[fk] = family[fk] || new Set()).add(o.imageUrl);
     }
     const usedOldKeys = new Set();
     let kept = 0;
@@ -1428,6 +1437,12 @@ textarea { min-height: 80px; resize: vertical; }
         // Mismo producto pero el talle cambió (ej: antes vacío, ahora detectado)
         const set = normNoSize[normImgKey(n.name)];
         if (set && set.size === 1) img = Array.from(set)[0];
+      }
+      if (!img) {
+        // Mismo producto en otro talle/presentación: hereda la imagen de la familia
+        // (solo si todas las imágenes de esa familia son la misma)
+        const fset = family[familyKey(n.name)];
+        if (fset && fset.size === 1) img = Array.from(fset)[0];
       }
       if (img) {
         n.imageUrl = img;
