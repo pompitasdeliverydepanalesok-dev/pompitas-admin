@@ -1410,7 +1410,10 @@ textarea { min-height: 80px; resize: vertical; }
   }
 
   function familyKey(str) {
-    return normImgKey(str)
+    // Primero sacamos los talles combinados con su cantidad (ej: "P-Mx8", "G-XG x16", "S - M x14")
+    const pre = String(str || '').toUpperCase()
+      .replace(/(^|[\s/])[PSGL]\s*-\s*(?:M|XG|XL)\s*X\d+/g, ' ');
+    return normImgKey(pre)
       .replace(/\b(XXXG|XXXL|XXG|XXL|XG|XL|XP|XS|RN|JUNIOR|JR|SG|MG|PP|GG|J|P|M|G|L|S)X\d+\b/g, ' ')
       .replace(/\s+/g, ' ').trim();
   }
@@ -1450,9 +1453,9 @@ textarea { min-height: 80px; resize: vertical; }
         usedOldKeys.add(normImgKey(n.name));
       }
     }
-    // Productos con imagen que no tienen equivalente en el PDF nuevo
-    const newNorm = new Set(newList.map(n => normImgKey(n.name)));
-    const orphans = withImg.filter(o => !newNorm.has(normImgKey(o.name)));
+    // Fotos cargadas que ya no quedan usadas por ningún producto del catálogo nuevo
+    const newUrls = new Set(newList.map(n => n.imageUrl).filter(Boolean));
+    const orphans = withImg.filter(o => !newUrls.has(o.imageUrl));
     return { kept, totalWithImage: withImg.length, orphans };
   }
 
@@ -1477,10 +1480,10 @@ textarea { min-height: 80px; resize: vertical; }
     `;
     const carry = carryOverImages(state.parsed.products, state.products || []);
     $('#imgCarryInfo').innerHTML = `
-      <p><strong>🖼️ Imágenes:</strong> se conservan <strong>${carry.kept}</strong> de las ${carry.totalWithImage} que tenés cargadas.</p>
+      <p><strong>🖼️ Imágenes:</strong> el catálogo nuevo queda con <strong>${carry.kept}</strong> productos con imagen (hoy tenés ${carry.totalWithImage}).</p>
       ` + (carry.orphans.length
-        ? `<p class="muted">${carry.orphans.length} producto(s) con imagen ya no figuran en el PDF (ej: ${escapeHtml(carry.orphans.slice(0,3).map(o => o.name).join(' · '))}). Si querés conservarlos, cancelá y avisame.</p>`
-        : `<p class="muted">Ningún producto con imagen desaparece del catálogo.</p>`);
+        ? `<p class="muted">⚠️ ${carry.orphans.length} imagen(es) cargada(s) se perderían porque su producto ya no figura en el PDF (ej: ${escapeHtml(carry.orphans.slice(0,3).map(o => o.name).join(' · '))}). Si no es lo que esperabas, cancelá y mandame una captura.</p>`
+        : `<p class="muted">✅ No se pierde ninguna imagen cargada.</p>`);
     modal.classList.add('active');
   }
 
