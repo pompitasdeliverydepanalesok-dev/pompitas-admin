@@ -587,7 +587,7 @@
      ============================================================ */
 
   function diffProducts(oldList, newList) {
-    const keyOf = p => String(p.name) + '|' + String(p.size || '');
+    const keyOf = p => String(p.name) + '|' + String(p.size || '') + '|' + String(p.brand || '');
 
     const oldMap = {}, newMap = {};
     for (const p of oldList) oldMap[keyOf(p)] = p;
@@ -815,7 +815,8 @@
     },
 
     _key(item) {
-      return String(item.name) + '|' + String(item.size || '');
+      // Incluye la marca: dos marcas pueden tener un producto con el mismo nombre y talle
+      return String(item.name) + '|' + String(item.size || '') + '|' + String(item.brand || '');
     },
 
     items() { this._load(); return this._items.slice(); },
