@@ -1419,39 +1419,45 @@ textarea { min-height: 80px; resize: vertical; }
   }
 
   function carryOverImages(newList, oldList) {
-    const exact = {}, norm = {}, normNoSize = {}, family = {};
+    const B = p => String(p.brand || '');
+    const exact = {}, norm = {}, normNoSize = {}, family = {}, looseOrphan = {};
     const withImg = oldList.filter(p => p.imageUrl);
+    const newNormKeys = new Set(newList.map(n => normImgKey(n.name) + '|' + (n.size || '') + '|' + B(n)));
     for (const o of withImg) {
-      exact[o.name + '|' + (o.size || '')] = o.imageUrl;
-      norm[normImgKey(o.name) + '|' + (o.size || '')] = o.imageUrl;
-      const k = normImgKey(o.name);
+      exact[o.name + '|' + (o.size || '') + '|' + B(o)] = o.imageUrl;
+      norm[normImgKey(o.name) + '|' + (o.size || '') + '|' + B(o)] = o.imageUrl;
+      const k = normImgKey(o.name) + '|' + B(o);
       (normNoSize[k] = normNoSize[k] || new Set()).add(o.imageUrl);
-      const fk = familyKey(o.name);
+      const fk = familyKey(o.name) + '|' + B(o);
       (family[fk] = family[fk] || new Set()).add(o.imageUrl);
+      // Foto de un producto cuya marca+nombre+talle ya no existe (ej: cambió de marca)
+      if (!newNormKeys.has(normImgKey(o.name) + '|' + (o.size || '') + '|' + B(o))) {
+        const lk = normImgKey(o.name) + '|' + (o.size || '');
+        (looseOrphan[lk] = looseOrphan[lk] || new Set()).add(o.imageUrl);
+      }
     }
-    const usedOldKeys = new Set();
     let kept = 0;
     for (const n of newList) {
       if (n.imageUrl) continue;
-      const kExact = n.name + '|' + (n.size || '');
-      const kNorm = normImgKey(n.name) + '|' + (n.size || '');
+      const kExact = n.name + '|' + (n.size || '') + '|' + B(n);
+      const kNorm = normImgKey(n.name) + '|' + (n.size || '') + '|' + B(n);
       let img = exact[kExact] || norm[kNorm];
       if (!img) {
         // Mismo producto pero el talle cambió (ej: antes vacío, ahora detectado)
-        const set = normNoSize[normImgKey(n.name)];
+        const set = normNoSize[normImgKey(n.name) + '|' + B(n)];
         if (set && set.size === 1) img = Array.from(set)[0];
       }
       if (!img) {
-        // Mismo producto en otro talle/presentación: hereda la imagen de la familia
-        // (solo si todas las imágenes de esa familia son la misma)
-        const fset = family[familyKey(n.name)];
+        // Mismo producto en otro talle/presentación: hereda la imagen de la familia (misma marca)
+        const fset = family[familyKey(n.name) + '|' + B(n)];
         if (fset && fset.size === 1) img = Array.from(fset)[0];
       }
-      if (img) {
-        n.imageUrl = img;
-        kept++;
-        usedOldKeys.add(normImgKey(n.name));
+      if (!img) {
+        // Cambio de marca: toma la foto del producto viejo solo si ya no existe y es único
+        const oset = looseOrphan[normImgKey(n.name) + '|' + (n.size || '')];
+        if (oset && oset.size === 1) img = Array.from(oset)[0];
       }
+      if (img) { n.imageUrl = img; kept++; }
     }
     // Fotos cargadas que ya no quedan usadas por ningún producto del catálogo nuevo
     const newUrls = new Set(newList.map(n => n.imageUrl).filter(Boolean));
@@ -1548,7 +1554,7 @@ textarea { min-height: 80px; resize: vertical; }
         ? `<div class="thumb"><img src="${escapeHtml(p.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.classList.add('empty');this.remove();"></div>`
         : `<div class="thumb empty"></div>`;
       return `
-        <tr data-key="${escapeHtml(p.name + '|' + (p.size||''))}">
+        <tr data-key="${escapeHtml(p.name + '|' + (p.size||'') + '|' + (p.brand||''))}">
           <td>${thumb}</td>
           <td>${escapeHtml(p.name)} ${noPriceTag}</td>
           <td>${escapeHtml(p.brand || '')}</td>
@@ -1600,6 +1606,7 @@ textarea { min-height: 80px; resize: vertical; }
     const update = {
       name: state.editingProduct.name,
       size: state.editingProduct.size || '',
+      brand: state.editingProduct.brand,
       imageUrl: newImage,
       priceConsumer: newPrice
     };
@@ -1609,7 +1616,7 @@ textarea { min-height: 80px; resize: vertical; }
       await P.api.updateProduct(url, token, update);
       // Actualizar localmente
       const idx = state.products.findIndex(p =>
-        p.name === update.name && (p.size || '') === update.size);
+        p.name === update.name && (p.size || '') === update.size && (p.brand || '') === (update.brand || ''));
       if (idx !== -1) {
         state.products[idx].imageUrl = newImage;
         state.products[idx].priceConsumer = newPrice;
