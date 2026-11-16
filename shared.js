@@ -69,7 +69,8 @@
     "Pampers","Huggies","Babysec","Estrella","Plenitud","Tena","Nonino",
     "Nonisec","Comodín","Comodin","Q-Soft","Qsoft","Ideal","Duffy",
     "Toddler","Doncella","Indasec","Indas","EWE","Hennia","Ambos",
-    "Baño Facil","Baño Fácil","Igaltex"
+    "Baño Facil","Baño Fácil","Igaltex",
+    "Benare","Donna","Varios"
   ];
 
   const BRAND_NORMALIZE = {
@@ -83,7 +84,7 @@
   const IGNORE_PATTERNS = [
     /^tipo de producto/i, /^precio$/i,
     /^pañales y articulos/i, /^panales y articulos/i,
-    /^perfumeria/i, /^varios$/i,
+    /^perfumeria/i,
     /^hac[eé] tu pedido/i, /whatsapp/i,
     /^esta lista puede sufrir/i, /^lista correspondiente/i,
     /^distribuimos las marcas/i, /^el mejor precio/i, /^¡el mejor/i,
@@ -976,14 +977,33 @@
      * Threshold por defecto 0.65 (admite ~1 error por palabra de 3-4 letras).
      * Si el query tiene múltiples palabras, busca que TODAS aparezcan (cada una con su score).
      */
+    /** Abreviaturas de toallitas húmedas: "t hum", "thum", "toa hum", "toallas humedas" -> "toallitas" */
+    _expandQuery(q) {
+      return q.replace(/\b(?:t|toa|toalla|toallas|toallita|toallitas)\s?hum\w*/g, 'toallitas');
+    },
+
+    /** Palabras extra con las que se puede encontrar un producto (sinónimos). */
+    _searchAliases(name) {
+      const n = String(name || '').toUpperCase();
+      let a = '';
+      // Toallitas húmedas: T.HUMEDAS, TOALLAS HUMEDAS, TOALLITAS, PAÑOS HUMEDOS, PAÑO JABONOSO
+      if (/\bT\.?\s?HUM|TOALLAS?\s+HUMEDAS|TOALLITAS|HUMED[AO]S?|PA[ÑN]OS?\s+(JABONOSO|HUMEDO)/.test(n)) {
+        a += ' toallitas toallas toalla humedas';
+      }
+      // Toallas femeninas escritas como "TOA."
+      if (/\bTOA\b/.test(n)) a += ' toallas toalla';
+      return a;
+    },
+
     fuzzyFilter(products, query, threshold = 0.65) {
-      const q = this.normalize(query);
+      let q = this.normalize(query);
       if (!q) return products;
+      q = this._expandQuery(q);
       const queryWords = q.split(' ').filter(Boolean);
       // Para cada producto, computar score combinado de todos sus campos buscables
       return products.filter(p => {
         const haystack = this.normalize(
-          (p.name || '') + ' ' + (p.brand || '') + ' ' + (p.size || '')
+          (p.name || '') + ' ' + (p.brand || '') + ' ' + (p.size || '') + this._searchAliases(p.name)
         );
         // Cada palabra del query debe matchear (substring O fuzzy) en el haystack
         return queryWords.every(qw => {
